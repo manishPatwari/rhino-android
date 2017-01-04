@@ -31,6 +31,7 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import dalvik.system.DexFile;
@@ -47,9 +48,10 @@ public class AndroidClassLoader extends ClassLoader implements GeneratedClassLoa
 
     private final ClassLoader parent;
     private List<DexFile> dx;
-    private final File dexFile;
-    private final File odexOatFile;
-    private final File classFile;
+    private File dir;
+    private File dexFile;
+    private File odexOatFile;
+    private File classFile;
 
     /**
      * Create a new instance with the given parent classloader and cache dierctory
@@ -60,9 +62,14 @@ public class AndroidClassLoader extends ClassLoader implements GeneratedClassLoa
     public AndroidClassLoader(ClassLoader parent, File dir) {
         this.parent = parent;
         dx = new ArrayList<>();
-        dexFile = new File(dir, "dex-" + hashCode() + ".jar");
-        odexOatFile = new File(dir, "odex_oat-" + hashCode() + ".tmp");
-        classFile = new File(dir, "class-" + hashCode() + ".jar");
+        this.dir = dir;
+
+    }
+
+    private void createFiles(String name){
+        dexFile = new File(dir, "dex-" + name + ".jar");
+        odexOatFile = new File(dir, "odex_oat-" + name + ".tmp");
+        classFile = new File(dir, "class-" + name + ".jar");
         dir.mkdirs();
     }
 
@@ -72,6 +79,8 @@ public class AndroidClassLoader extends ClassLoader implements GeneratedClassLoa
     @Override
     public Class<?> defineClass(String name, byte[] data) {
         try {
+            int dataHashCode = Arrays.deepHashCode(new Object[]{data});
+            createFiles(name + dataHashCode);
             final ZipFile zipFile = new ZipFile(classFile);
             final ZipParameters parameters = new ZipParameters();
             parameters.setFileNameInZip(name.replace('.', '/') + ".class");
@@ -81,8 +90,8 @@ public class AndroidClassLoader extends ClassLoader implements GeneratedClassLoa
         } catch (IOException | ZipException e) {
             throw new FatalLoadingException(e);
         } finally {
-            dexFile.delete();
-            odexOatFile.delete();
+//            dexFile.delete();
+//            odexOatFile.delete();
         }
     }
 
@@ -112,11 +121,13 @@ public class AndroidClassLoader extends ClassLoader implements GeneratedClassLoa
         if (!classFile.exists()) {
             classFile.createNewFile();
         }
-        final Main.Arguments arguments = new Main.Arguments();
-        arguments.fileNames = new String[]{classFile.getPath()};
-        arguments.outName = dexFile.getPath();
-        arguments.jarOutput = true;
-        Main.run(arguments);
+        if(!dexFile.exists()) {
+            final Main.Arguments arguments = new Main.Arguments();
+            arguments.fileNames = new String[] {classFile.getPath()};
+            arguments.outName = dexFile.getPath();
+            arguments.jarOutput = true;
+            Main.run(arguments);
+        }
         DexFile dex = DexFile.loadDex(dexFile.getPath(), odexOatFile.getPath(), 0);
         dx.add(dex);
         return dex;
